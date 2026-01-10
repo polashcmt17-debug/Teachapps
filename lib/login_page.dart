@@ -18,11 +18,22 @@ class _LoginPageState extends State<LoginPage> {
 
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  // 👁️ show / hide password state
+  bool _obscurePassword = true;
+
+  // ✅ Email regex
+  final RegExp emailRegex =
+      RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+
+  // ✅ Password regex
+  final RegExp passwordRegex =
+      RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d]{8,}$');
+
   Future<void> login() async {
     final email = emailController.text.trim();
     final password = passwordController.text.trim();
 
-    // 1️⃣ Validate input
+    // 1️⃣ Empty check
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please enter email and password")),
@@ -30,8 +41,29 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
 
+    // 2️⃣ Email regex check
+    if (!emailRegex.hasMatch(email)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Enter a valid email address")),
+      );
+      return;
+    }
+
+    // 3️⃣ Password regex check
+    if (!passwordRegex.hasMatch(password)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Password must be at least 8 characters\n"
+            "Include uppercase, lowercase & number",
+          ),
+        ),
+      );
+      return;
+    }
+
     try {
-      // 2️⃣ Get user document (email = document ID)
+      // 4️⃣ Firestore fetch
       final doc =
           await _firestore.collection('users').doc(email).get();
 
@@ -46,7 +78,7 @@ class _LoginPageState extends State<LoginPage> {
       final storedPassword = data['password'];
       final role = data['role'];
 
-      // 3️⃣ Password check
+      // 5️⃣ Password match
       if (storedPassword != password) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Incorrect password")),
@@ -54,12 +86,12 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
 
-      // 4️⃣ Login success
+      // 6️⃣ Login success
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Login successful")),
       );
 
-      // 5️⃣ Role-based navigation
+      // 7️⃣ Role navigation
       if (role == 'student') {
         Navigator.pushReplacement(
           context,
@@ -100,22 +132,39 @@ class _LoginPageState extends State<LoginPage> {
 
             const SizedBox(height: 30),
 
+            /// Email
             TextField(
               controller: emailController,
+              keyboardType: TextInputType.emailAddress,
               decoration: const InputDecoration(
                 labelText: "Email",
                 prefixIcon: Icon(Icons.email),
+                border: OutlineInputBorder(),
               ),
             ),
 
             const SizedBox(height: 16),
 
+            /// Password 👁️
             TextField(
               controller: passwordController,
-              obscureText: true,
-              decoration: const InputDecoration(
+              obscureText: _obscurePassword,
+              decoration: InputDecoration(
                 labelText: "Password",
-                prefixIcon: Icon(Icons.lock),
+                prefixIcon: const Icon(Icons.lock),
+                border: const OutlineInputBorder(),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscurePassword
+                        ? Icons.visibility_off
+                        : Icons.visibility,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _obscurePassword = !_obscurePassword;
+                    });
+                  },
+                ),
               ),
             ),
 

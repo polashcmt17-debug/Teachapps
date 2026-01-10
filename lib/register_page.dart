@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/services.dart';
 import './firestore_service.dart';
 
 class RegisterPage extends StatefulWidget {
@@ -22,18 +22,21 @@ class _RegisterPageState extends State<RegisterPage> {
   final FirestoreService firestoreService = FirestoreService();
 
   String role = "Student";
+  String selectedDept = "CSE";
 
-  // 👁️ show / hide states
+  // 👁️ show / hide
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
 
-  // Email regex
+  // Regex
   final RegExp emailRegex =
       RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
 
-  // Password regex
   final RegExp passwordRegex =
       RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[A-Za-z\d]{8,}$');
+
+  // ID: starts with 018, max 16 digits
+  final RegExp idRegex = RegExp(r'^018\d{0,13}$');
 
   InputDecoration inputStyle(String label, IconData icon) {
     return InputDecoration(
@@ -55,7 +58,6 @@ class _RegisterPageState extends State<RegisterPage> {
       appBar: AppBar(
         title: const Text("Create Account"),
         centerTitle: true,
-        elevation: 0,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -69,9 +71,21 @@ class _RegisterPageState extends State<RegisterPage> {
               /// ID
               TextFormField(
                 controller: idController,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(16),
+                ],
                 decoration: inputStyle("ID", Icons.badge),
-                validator: (v) =>
-                    v == null || v.isEmpty ? "Enter ID" : null,
+                validator: (v) {
+                  if (v == null || v.isEmpty) {
+                    return "Enter ID";
+                  }
+                  if (!idRegex.hasMatch(v)) {
+                    return "ID must start with 018 and max 16 digits";
+                  }
+                  return null;
+                },
               ),
               const SizedBox(height: 14),
 
@@ -96,26 +110,27 @@ class _RegisterPageState extends State<RegisterPage> {
               ),
               const SizedBox(height: 14),
 
-                              /// Department Dropdown
-                DropdownButtonFormField<String>(
-                  value: "CSE", // Default value
-                  decoration: inputStyle("Department", Icons.apartment),
-                  items: const [
-                    DropdownMenuItem(value: "CSE", child: Text("CSE")),
-                    DropdownMenuItem(value: "EEE", child: Text("EEE")),
-                    DropdownMenuItem(value: "LAW", child: Text("LAW")),
-                    DropdownMenuItem(value: "CIVIL", child: Text("CIVIL")),
-                    DropdownMenuItem(value: "ENGLISH", child: Text("ENGLISH")),
-                  ],
-                  onChanged: (value) {
-                    setState(() {
-                      deptController.text = value!; // Save selected value
-                    });
-                  },
-                  validator: (v) =>
-                      v == null || v.isEmpty ? "Select department" : null,
-                ),
-                   const SizedBox(height: 14),
+              /// Department
+              DropdownButtonFormField<String>(
+                value: selectedDept,
+                decoration: inputStyle("Department", Icons.apartment),
+                items: const [
+                  DropdownMenuItem(value: "CSE", child: Text("CSE")),
+                  DropdownMenuItem(value: "EEE", child: Text("EEE")),
+                  DropdownMenuItem(value: "LAW", child: Text("LAW")),
+                  DropdownMenuItem(value: "CIVIL", child: Text("CIVIL")),
+                  DropdownMenuItem(value: "ENGLISH", child: Text("ENGLISH")),
+                ],
+                onChanged: (value) {
+                  setState(() {
+                    selectedDept = value!;
+                    deptController.text = value;
+                  });
+                },
+                validator: (v) =>
+                    v == null || v.isEmpty ? "Select department" : null,
+              ),
+              const SizedBox(height: 14),
 
               /// Email
               TextFormField(
@@ -127,24 +142,23 @@ class _RegisterPageState extends State<RegisterPage> {
                     return "Enter email";
                   }
                   if (!emailRegex.hasMatch(v)) {
-                    return "Enter valid email (example@email.com)";
+                    return "Enter valid email";
                   }
                   return null;
                 },
               ),
               const SizedBox(height: 14),
 
-              /// Password 👁️
+              /// Password
               TextFormField(
                 controller: passwordController,
                 obscureText: _obscurePassword,
                 decoration: inputStyle("Password", Icons.lock).copyWith(
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _obscurePassword
-                          ? Icons.visibility_off
-                          : Icons.visibility,
-                    ),
+                        _obscurePassword
+                            ? Icons.visibility_off
+                            : Icons.visibility),
                     onPressed: () {
                       setState(() {
                         _obscurePassword = !_obscurePassword;
@@ -164,7 +178,7 @@ class _RegisterPageState extends State<RegisterPage> {
               ),
               const SizedBox(height: 14),
 
-              /// Confirm Password 👁️
+              /// Confirm Password
               TextFormField(
                 controller: confirmPasswordController,
                 obscureText: _obscureConfirmPassword,
@@ -173,10 +187,9 @@ class _RegisterPageState extends State<RegisterPage> {
                         .copyWith(
                   suffixIcon: IconButton(
                     icon: Icon(
-                      _obscureConfirmPassword
-                          ? Icons.visibility_off
-                          : Icons.visibility,
-                    ),
+                        _obscureConfirmPassword
+                            ? Icons.visibility_off
+                            : Icons.visibility),
                     onPressed: () {
                       setState(() {
                         _obscureConfirmPassword =
@@ -199,43 +212,27 @@ class _RegisterPageState extends State<RegisterPage> {
                 width: double.infinity,
                 height: 50,
                 child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
                   onPressed: () async {
                     if (_formKey.currentState!.validate()) {
-                      final String name = nameController.text.trim();
-                      final String email = emailController.text.trim();
-                      final String password =
-                          passwordController.text.trim();
-                      final String department =
-                          deptController.text.trim();
-                      final String userRole =
-                          role.toLowerCase();
-
                       try {
                         await firestoreService.saveUser(
-                          email: email,
-                          name: name,
-                          department: department,
-                          password: password,
-                          role: userRole,
+                          email: emailController.text.trim(),
+                          name: nameController.text.trim(),
+                          department: deptController.text.trim(),
+                          password: passwordController.text.trim(),
+                          role: role.toLowerCase(),
                         );
 
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text("Registration Successful"),
-                          ),
+                              content: Text("Registration Successful")),
                         );
 
                         Navigator.pop(context);
                       } catch (e) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
-                            content: Text("Registration Failed"),
-                          ),
+                              content: Text("Registration Failed")),
                         );
                       }
                     }

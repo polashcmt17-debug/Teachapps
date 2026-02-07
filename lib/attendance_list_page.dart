@@ -195,7 +195,6 @@ class _AddAttendanceSection extends StatefulWidget {
 
 class _AddAttendanceSectionState
     extends State<_AddAttendanceSection> {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final courseController = TextEditingController();
   final batchController = TextEditingController();
   final sectionController = TextEditingController();

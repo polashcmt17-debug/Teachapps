@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart'; 
 import 'attendance_page.dart';
+import 'attendance_list_page.dart';
 
 
 class TeacherHomePage extends StatefulWidget {
@@ -159,7 +160,7 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => const AttendancePage(),
+                    builder: (_) => const AttendanceListPage(),
                   ),
                 );
               },

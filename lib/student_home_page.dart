@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'search_teacher_page.dart';
+import 'class_routine_upload _student.dart';
 
 class StudentHomePage extends StatelessWidget {
   const StudentHomePage({super.key});
@@ -49,7 +50,7 @@ class StudentHomePage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  "Welcome ",
+                  "Welcome",
                   style: TextStyle(
                     color: Colors.white70,
                     fontSize: 14,
@@ -59,7 +60,7 @@ class StudentHomePage extends StatelessWidget {
                 Text(
                   "Student 🧑‍🎓",
                   style: TextStyle(
-                    color: Color.fromARGB(255, 221, 226, 222),
+                    color: Colors.white,
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
                   ),
@@ -120,12 +121,27 @@ class StudentHomePage extends StatelessWidget {
           ),
 
           /// 📅 Weekly Timetable
-          _smartTile(
-            context,
-            icon: Icons.calendar_month,
-            color: Colors.purple,
-            title: "Weekly Timetable",
-            subtitle: "View teacher’s weekly schedule",
+          Card(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: ListTile(
+              leading: const Icon(Icons.calendar_month, color: Colors.teal),
+              title: const Text(
+                "Update Class Routine",
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: const Text("View weekly schedule"),
+              trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const ClassRoutineUploadPage(),
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -155,7 +171,8 @@ class StudentHomePage extends StatelessWidget {
         ],
       ),
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         leading: Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
@@ -173,7 +190,9 @@ class StudentHomePage extends StatelessWidget {
         onTap: onTap ??
             () {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Feature coming soon 🚧")),
+                const SnackBar(
+                  content: Text("Feature coming soon 🚧"),
+                ),
               );
             },
       ),

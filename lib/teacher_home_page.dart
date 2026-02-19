@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart'; 
 import 'attendance_list_page.dart';
+import 'class_routine_upload_page.dart';
 
 
 class TeacherHomePage extends StatefulWidget {
@@ -138,11 +139,16 @@ class _TeacherHomePageState extends State<TeacherHomePage> {
           Card(
             child: ListTile(
               leading: const Icon(Icons.calendar_month, color: Colors.teal),
-              title: const Text("Weekly Timetable"),
+              title: const Text("Updet class routine"),
               subtitle: const Text("View weekly schedule"),
               trailing: const Icon(Icons.arrow_forward_ios),
               onTap: () {
-                showSnackBar(context, "Weekly timetable coming soon 🚧");
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const ClassRoutineUploadPage(),
+                  ),
+                );
               },
             ),
           ),

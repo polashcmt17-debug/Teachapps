@@ -22,10 +22,13 @@ class _SearchTeacherPageState extends State<SearchTeacherPage> {
   final String teacherSheet =
       "https://docs.google.com/spreadsheets/d/1jjOmSUg3U_uyzM0mtaj1FldEOD1nNeMCAhybEiQTW3M/export?format=csv&gid=2120560749";
 
+    final String teacherSheetGED =
+      "https://docs.google.com/spreadsheets/d/1jjOmSUg3U_uyzM0mtaj1FldEOD1nNeMCAhybEiQTW3M/export?format=csv&gid=639086230";
+
   final Map<String, String> daySheetMap = {
     "saturday": "997090556",
     "sunday": "255270977",
-    "monday": "255270977",
+    "monday": "447521283",
     "tuesday": "1496246527",
     "wednesday": "1383433023",
     "thursday": "739024824",
@@ -47,6 +50,8 @@ class _SearchTeacherPageState extends State<SearchTeacherPage> {
 
   Future<void> fetchTeachers() async {
     final response = await http.get(Uri.parse(teacherSheet));
+    final responseGED = await http.get(Uri.parse(teacherSheetGED));
+    
     if (response.statusCode == 200) {
       List<String> rows = response.body.split("\n");
 
@@ -59,6 +64,20 @@ class _SearchTeacherPageState extends State<SearchTeacherPage> {
           });
         }
       }
+
+      List<String> rowsGED = response.body.split("\n");
+      for (int i = 1; i < rowsGED.length; i++) {
+        final columns = rowsGED[i].split(",");
+        if (columns.length > 2) {
+          allTeachers.add({
+            "acronym": columns[3].trim(),
+            "fullName": columns[4].trim(),
+          });
+        }
+      }
+
+      // rows.addAll(rowsGED);
+        
       setState(() {});
     }
   }
@@ -71,8 +90,7 @@ class _SearchTeacherPageState extends State<SearchTeacherPage> {
 
     final results = allTeachers.where((teacher) {
       final name = teacher["fullName"]!.toLowerCase();
-      final acronym = teacher["acronym"]!.toLowerCase();
-      // print("Hare krishna answer: ${acronym} ");
+      final acronym = teacher["acronym"]!.toLowerCase(); 
       final input = query.toLowerCase();
       return name.contains(input) || acronym.contains(input);
     }).toList();
@@ -90,8 +108,7 @@ class _SearchTeacherPageState extends State<SearchTeacherPage> {
     // final currentTime = DateFormat('HH:mm').format(now);
 
     final gid = daySheetMap[currentDay];
-    if (gid == null) {
-      print("No sheet for $currentDay");
+    if (gid == null) { 
       setState(() => resultText = "No routine for today");
       return;
     }
@@ -114,17 +131,18 @@ class _SearchTeacherPageState extends State<SearchTeacherPage> {
     int matchedColumnIndex = -1;
 
     for (int i = 0; i < header.length; i++) {
-      if (header[i].contains("-")) { 
-        print("Checking time range: ${header[i]} against current time: ");
+      print("Checking header: ${header[i]}");
+      if (header[i].contains("-")) {
         if (isTimeInRange(header[i])) {
           matchedColumnIndex = i;
-          print("Matched column: $i with time range ${header[i]}");
+          print("ok found object... $i");
           break;
         }
       }
     }
 
     if (matchedColumnIndex == -1) {
+      print("No matching time column found");
       setState(() => resultText = "No class at this time");
       return;
     }
@@ -132,7 +150,6 @@ class _SearchTeacherPageState extends State<SearchTeacherPage> {
     for (int i = 2; i < table.length; i++) {
       if (table[i].length > matchedColumnIndex) {
         String cell = table[i][matchedColumnIndex];
-        print("HK: Checking cell '$cell' for acronym '$selectedAcronym'");
         if (cell.contains(selectedAcronym!)) {
           setState(() => resultText = cell);
           return;
@@ -146,22 +163,18 @@ class _SearchTeacherPageState extends State<SearchTeacherPage> {
 bool isTimeInRange(String range) {
   try {
     // final now = DateTime.now();
-    DateTime now = parseSheetTime("11:00 AM");
+    DateTime now = parseSheetTime("09:05 AM");
 
     final parts = range.split("-");
     if (parts.length != 2) return false; 
 
-    print("HK: Parsing time range '$range' into start '${parts[0]}' and end '${parts[1]}'");
-    DateTime start = parseSheetTime(parts[0]); 
-    print('HK: Parsed start time: $start');
+    DateTime start = parseSheetTime(parts[0]);
     DateTime end = parseSheetTime(parts[1]);
-    print('HK: Parsed end time: $end');
 
     // Make start & end same date as today
     start = DateTime(now.year, now.month, now.day, start.hour, start.minute);
     end = DateTime(now.year, now.month, now.day, end.hour, end.minute);
     
-    print("HK: Checking if now ($now) is between $start and $end");
     return now.isAfter(start) && now.isBefore(end);
   } catch (e) {
     print("Error parsing time range '$range': $e");
@@ -175,8 +188,22 @@ DateTime parseSheetTime(String timeStr) {
       .trim()
       .toUpperCase()
       .replaceAll(".", ":")      // convert 1.25 → 1:25
-      .replaceAll("OL Class ", "")
+      .replaceAll("\"", "")
+      .replaceAll(RegExp(r'ol class\s*', caseSensitive: false), '')
+            // Step 2: Add a space between the time and AM/PM, and ensure AM/PM is uppercase.
+            .replaceAllMapped(
+              RegExp(r'(\d{1,2}(:\d{2})?)\s*(am|pm)', caseSensitive: false),
+              (Match match) {
+                // Group 1 contains the time part (e.g., "7:00").
+                String timePart = match.group(1)!;
+                // Group 3 contains the AM/PM part (e.g., "pm", "PM").
+                String amPmPart = match.group(3)!;
+                // Reconstruct the string with a space and ensure AM/PM is uppercase.
+                return '$timePart ${amPmPart.toUpperCase()}';
+              },
+            )
       .replaceAll(RegExp(r'\s+'), " "); // normalize spaces
+
 
   // If already contains AM/PM → parse normally
   if (timeStr.contains("AM") || timeStr.contains("PM")) {

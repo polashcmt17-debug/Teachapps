@@ -65,7 +65,7 @@ class _SearchTeacherPageState extends State<SearchTeacherPage> {
         }
       }
 
-      List<String> rowsGED = response.body.split("\n");
+      List<String> rowsGED = responseGED.body.split("\n");
       for (int i = 1; i < rowsGED.length; i++) {
         final columns = rowsGED[i].split(",");
         if (columns.length > 2) {
@@ -162,8 +162,8 @@ class _SearchTeacherPageState extends State<SearchTeacherPage> {
 
 bool isTimeInRange(String range) {
   try {
-    // final now = DateTime.now();
-    DateTime now = parseSheetTime("09:05 AM");
+    final now = DateTime.now();
+    // DateTime now = parseSheetTime("10:05 AM");
 
     final parts = range.split("-");
     if (parts.length != 2) return false; 

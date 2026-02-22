@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:teachmap/_batch_routine_page.dart';
 import 'search_teacher_page.dart';
 import 'class_routine_upload _student.dart';
 
@@ -109,6 +110,14 @@ class StudentHomePage extends StatelessWidget {
             color: Colors.green,
             title: "Current Class",
             subtitle: "See which class teacher is taking now",
+                        onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const BatchRoutinePage(),
+                ),
+              );
+            },
           ),
 
           /// ⏰ Teacher Status

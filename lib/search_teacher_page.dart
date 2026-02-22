@@ -17,12 +17,15 @@ class _SearchTeacherPageState extends State<SearchTeacherPage> {
 
   String? selectedAcronym;
   String? resultText;
+  String? errorMessage;
 
-  // Sheet IDs
+  bool isCheckingRoutine = false;
+  List<List<String>> todayRoutine = [];
+
   final String teacherSheet =
       "https://docs.google.com/spreadsheets/d/1jjOmSUg3U_uyzM0mtaj1FldEOD1nNeMCAhybEiQTW3M/export?format=csv&gid=2120560749";
 
-    final String teacherSheetGED =
+  final String teacherSheetGED =
       "https://docs.google.com/spreadsheets/d/1jjOmSUg3U_uyzM0mtaj1FldEOD1nNeMCAhybEiQTW3M/export?format=csv&gid=639086230";
 
   final Map<String, String> daySheetMap = {
@@ -34,13 +37,6 @@ class _SearchTeacherPageState extends State<SearchTeacherPage> {
     "thursday": "739024824",
     "friday": "307287901",
   };
-//   sunday: 255270977
-// monday: 255270977
-// tuesday: 1496246527
-// wednessday: 1383433023
-// thursday: 1383433023
-// friday: 1383433023
-// saturday: 
 
   @override
   void initState() {
@@ -48,16 +44,36 @@ class _SearchTeacherPageState extends State<SearchTeacherPage> {
     fetchTeachers();
   }
 
+  /// ================= NORMALIZE TABLE =================
+  List<List<String>> normalizeTable(List<List<String>> table) {
+    int maxLength = 0;
+
+    for (var row in table) {
+      if (row.length > maxLength) {
+        maxLength = row.length;
+      }
+    }
+
+    for (var row in table) {
+      while (row.length < maxLength) {
+        row.add("");
+      }
+    }
+
+    return table;
+  }
+
+  /// ================= FETCH TEACHERS =================
   Future<void> fetchTeachers() async {
+    allTeachers.clear();
     final response = await http.get(Uri.parse(teacherSheet));
     final responseGED = await http.get(Uri.parse(teacherSheetGED));
-    
+
     if (response.statusCode == 200) {
       List<String> rows = response.body.split("\n");
-
       for (int i = 1; i < rows.length; i++) {
         final columns = rows[i].split(",");
-        if (columns.length > 2) {
+        if (columns.length > 3) {
           allTeachers.add({
             "acronym": columns[2].trim(),
             "fullName": columns[3].trim(),
@@ -68,7 +84,7 @@ class _SearchTeacherPageState extends State<SearchTeacherPage> {
       List<String> rowsGED = responseGED.body.split("\n");
       for (int i = 1; i < rowsGED.length; i++) {
         final columns = rowsGED[i].split(",");
-        if (columns.length > 2) {
+        if (columns.length > 4) {
           allTeachers.add({
             "acronym": columns[3].trim(),
             "fullName": columns[4].trim(),
@@ -76,12 +92,11 @@ class _SearchTeacherPageState extends State<SearchTeacherPage> {
         }
       }
 
-      // rows.addAll(rowsGED);
-        
       setState(() {});
     }
   }
 
+  /// ================= SEARCH =================
   void searchTeacher(String query) {
     if (query.isEmpty) {
       setState(() => filteredTeachers = []);
@@ -90,7 +105,7 @@ class _SearchTeacherPageState extends State<SearchTeacherPage> {
 
     final results = allTeachers.where((teacher) {
       final name = teacher["fullName"]!.toLowerCase();
-      final acronym = teacher["acronym"]!.toLowerCase(); 
+      final acronym = teacher["acronym"]!.toLowerCase();
       final input = query.toLowerCase();
       return name.contains(input) || acronym.contains(input);
     }).toList();
@@ -100,200 +115,307 @@ class _SearchTeacherPageState extends State<SearchTeacherPage> {
     });
   }
 
+  /// ================= CHECK CURRENT CLASS =================
   Future<void> checkCurrentClass() async {
     if (selectedAcronym == null) return;
 
-    final now = DateTime.now();
-    final currentDay = DateFormat('EEEE').format(now).toLowerCase();
-    // final currentTime = DateFormat('HH:mm').format(now);
+    setState(() {
+      isCheckingRoutine = true;
+      resultText = null;
+      errorMessage = null;
+    });
 
-    final gid = daySheetMap[currentDay];
-    if (gid == null) { 
-      setState(() => resultText = "No routine for today");
-      return;
-    }
+    try {
+      final now = DateTime.now();
+      final currentDay =
+          DateFormat('EEEE').format(now).toLowerCase();
 
-    final routineUrl =
-        "https://docs.google.com/spreadsheets/d/1jjOmSUg3U_uyzM0mtaj1FldEOD1nNeMCAhybEiQTW3M/export?format=csv&gid=$gid";
+      final gid = daySheetMap[currentDay];
+      if (gid == null) {
+        setState(() {
+          resultText = "No routine for today";
+          isCheckingRoutine = false;
+        });
+        return;
+      }
 
-    final response = await http.get(Uri.parse(routineUrl));
-    if (response.statusCode != 200) return;
+      final routineUrl =
+          "https://docs.google.com/spreadsheets/d/1jjOmSUg3U_uyzM0mtaj1FldEOD1nNeMCAhybEiQTW3M/export?format=csv&gid=$gid";
 
-    List<List<String>> table = response.body
-        .split("\n")
-        .map((row) => row.split(","))
-        .toList();
+      final response = await http.get(Uri.parse(routineUrl));
+      if (response.statusCode != 200) {
+        throw Exception("Failed to load routine");
+      }
 
-    if (table.isEmpty) return;
+      List<List<String>> table = response.body
+          .split("\n")
+          .map((row) => row.split(","))
+          .toList();
 
-    List<String> header = table[3]; // time header row
+      todayRoutine = normalizeTable(table);
 
-    int matchedColumnIndex = -1;
+      List<String> header = todayRoutine[3];
+      int matchedColumnIndex = -1;
 
-    for (int i = 0; i < header.length; i++) {
-      print("Checking header: ${header[i]}");
-      if (header[i].contains("-")) {
-        if (isTimeInRange(header[i])) {
+      for (int i = 0; i < header.length; i++) {
+        if (header[i].contains("-") &&
+            isTimeInRange(header[i])) {
           matchedColumnIndex = i;
-          print("ok found object... $i");
           break;
         }
       }
-    }
 
-    if (matchedColumnIndex == -1) {
-      print("No matching time column found");
-      setState(() => resultText = "No class at this time");
-      return;
-    }
+      if (matchedColumnIndex == -1) {
+        setState(() {
+          resultText = "Free right now";
+          isCheckingRoutine = false;
+        });
+        return;
+      }
 
-    for (int i = 2; i < table.length; i++) {
-      if (table[i].length > matchedColumnIndex) {
-        String cell = table[i][matchedColumnIndex];
-        if (cell.contains(selectedAcronym!)) {
-          setState(() => resultText = cell);
-          return;
+      for (int i = 2; i < todayRoutine.length; i++) {
+        if (todayRoutine[i].length >
+            matchedColumnIndex) {
+          String cell =
+              todayRoutine[i][matchedColumnIndex];
+          if (cell.contains(selectedAcronym!)) {
+            setState(() {
+              resultText = cell;
+              isCheckingRoutine = false;
+            });
+            return;
+          }
         }
       }
+
+      setState(() {
+        resultText = "Free right now";
+        isCheckingRoutine = false;
+      });
+    } catch (e) {
+      setState(() {
+        errorMessage = "Something went wrong";
+        isCheckingRoutine = false;
+      });
+    }
+  }
+
+  bool isTimeInRange(String range) {
+    try {
+      final now = DateTime.now();
+      final parts = range.split("-");
+      if (parts.length != 2) return false;
+
+      DateTime start = parseSheetTime(parts[0]);
+      DateTime end = parseSheetTime(parts[1]);
+
+      start = DateTime(now.year, now.month, now.day,
+          start.hour, start.minute);
+      end = DateTime(now.year, now.month, now.day,
+          end.hour, end.minute);
+
+      return now.isAfter(start) && now.isBefore(end);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  DateTime parseSheetTime(String timeStr) {
+    timeStr = timeStr
+        .trim()
+        .toUpperCase()
+        .replaceAll(".", ":")
+        .replaceAll("\"", "")
+        .replaceAll(RegExp(r'\s+'), " ");
+
+    if (timeStr.contains("AM") ||
+        timeStr.contains("PM")) {
+      return DateFormat("h:mm a").parse(timeStr);
     }
 
-    setState(() => resultText = "No class right now");
+    DateTime temp =
+        DateFormat("h:mm").parse(timeStr);
+    String period =
+        (temp.hour >= 9 && temp.hour <= 11)
+            ? " AM"
+            : " PM";
+    return DateFormat("h:mm a")
+        .parse(timeStr + period);
   }
 
-bool isTimeInRange(String range) {
-  try {
-    final now = DateTime.now();
-    // DateTime now = parseSheetTime("10:05 AM");
-
-    final parts = range.split("-");
-    if (parts.length != 2) return false; 
-
-    DateTime start = parseSheetTime(parts[0]);
-    DateTime end = parseSheetTime(parts[1]);
-
-    // Make start & end same date as today
-    start = DateTime(now.year, now.month, now.day, start.hour, start.minute);
-    end = DateTime(now.year, now.month, now.day, end.hour, end.minute);
-    
-    return now.isAfter(start) && now.isBefore(end);
-  } catch (e) {
-    print("Error parsing time range '$range': $e");
-    return false;
-  }
-}
-
-
-DateTime parseSheetTime(String timeStr) {
-  timeStr = timeStr
-      .trim()
-      .toUpperCase()
-      .replaceAll(".", ":")      // convert 1.25 → 1:25
-      .replaceAll("\"", "")
-      .replaceAll(RegExp(r'ol class\s*', caseSensitive: false), '')
-            // Step 2: Add a space between the time and AM/PM, and ensure AM/PM is uppercase.
-            .replaceAllMapped(
-              RegExp(r'(\d{1,2}(:\d{2})?)\s*(am|pm)', caseSensitive: false),
-              (Match match) {
-                // Group 1 contains the time part (e.g., "7:00").
-                String timePart = match.group(1)!;
-                // Group 3 contains the AM/PM part (e.g., "pm", "PM").
-                String amPmPart = match.group(3)!;
-                // Reconstruct the string with a space and ensure AM/PM is uppercase.
-                return '$timePart ${amPmPart.toUpperCase()}';
-              },
-            )
-      .replaceAll(RegExp(r'\s+'), " "); // normalize spaces
-
-
-  // If already contains AM/PM → parse normally
-  if (timeStr.contains("AM") || timeStr.contains("PM")) {
-    return DateFormat("h:mm a").parse(timeStr);
-  }
-
-  // Parse as 12-hour WITHOUT AM/PM
-  DateTime temp = DateFormat("h:mm").parse(timeStr);
-
-  int hour = temp.hour;
-
-  String period;
-
-  if (hour >= 9 && hour <= 11) {
-    period = " AM";
-  } else {
-    period = " PM";
-  }
-
-  String formatted = timeStr + period;
-
-  return DateFormat("h:mm a").parse(formatted);
-}
-
-
-  DateTime parseTime(String timeStr) {
-    timeStr = timeStr.replaceAll("AM", "").replaceAll("PM", "").trim();
-    return DateFormat("HH:mm").parse(
-        DateFormat("HH:mm").format(DateFormat("HH:mm").parse(timeStr)));
-  }
-
-
+  /// ================= UI =================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Search Teacher")),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            TextField(
-              controller: searchController,
-              decoration: InputDecoration(
-                hintText: "Search teacher",
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              onChanged: searchTeacher,
-            ),
-
-            const SizedBox(height: 10),
-
-            if (filteredTeachers.isNotEmpty)
-              Container(
-                height: 200,
-                child: ListView.builder(
-                  itemCount: filteredTeachers.length,
-                  itemBuilder: (context, index) {
-                    final teacher = filteredTeachers[index];
-                    return ListTile(
-                      title: Text(
-                          "${teacher['fullName']} (${teacher['acronym']})"),
-                      onTap: () {
-                        selectedAcronym = teacher['acronym'];
-                        searchController.text = teacher['fullName']!;
-                        filteredTeachers = [];
-                        setState(() {});
-                        checkCurrentClass();
-                      },
-                    );
-                  },
-                ),
-              ),
-
-            const SizedBox(height: 20),
-
-            if (resultText != null)
-              Card(
-                color: Colors.green.shade100,
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Text(
-                    resultText!,
-                    style: const TextStyle(
-                        fontSize: 18, fontWeight: FontWeight.bold),
+      appBar: AppBar(
+        title: const Text("Search Teacher"),
+        centerTitle: true,
+      ),
+      body: RefreshIndicator(
+        onRefresh: fetchTeachers,
+        child: SingleChildScrollView(
+          physics:
+              const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              TextField(
+                controller: searchController,
+                decoration: InputDecoration(
+                  hintText: "Search teacher",
+                  prefixIcon:
+                      const Icon(Icons.search),
+                  filled: true,
+                  fillColor: Colors.grey.shade100,
+                  border: OutlineInputBorder(
+                    borderRadius:
+                        BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
                   ),
                 ),
+                onChanged: searchTeacher,
               ),
-          ],
+              const SizedBox(height: 15),
+
+              if (filteredTeachers.isNotEmpty)
+                SizedBox(
+                  height: 200,
+                  child: ListView.builder(
+                    itemCount:
+                        filteredTeachers.length,
+                    itemBuilder: (context, index) {
+                      final teacher =
+                          filteredTeachers[index];
+                      return Card(
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            child: Text(
+                                teacher['acronym']![0]),
+                          ),
+                          title:
+                              Text(teacher['fullName']!),
+                          subtitle: Text(
+                              "(${teacher['acronym']})"),
+                          onTap: () {
+                            selectedAcronym =
+                                teacher['acronym'];
+                            searchController.text =
+                                teacher['fullName']!;
+                            filteredTeachers = [];
+                            setState(() {});
+                            checkCurrentClass();
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+
+              const SizedBox(height: 20),
+
+              if (isCheckingRoutine)
+                const CircularProgressIndicator(),
+
+              if (resultText != null)
+                Card(
+                  color: resultText!
+                          .toLowerCase()
+                          .contains("free")
+                      ? Colors.blue.shade100
+                      : Colors.green.shade100,
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.all(18),
+                    child: Column(
+                      children: [
+                        Text(
+                          resultText!,
+                          style:
+                              const TextStyle(
+                            fontSize: 18,
+                            fontWeight:
+                                FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          resultText!
+                                  .toLowerCase()
+                                  .contains("free")
+                              ? "Status: Free"
+                              : "Status: In Class",
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+              /// ================= FULL DAY ROUTINE TABLE =================
+              if (todayRoutine.isNotEmpty)
+                ExpansionTile(
+                  title: const Text(
+                    "View Full Day Routine",
+                    style: TextStyle(
+                        fontWeight:
+                            FontWeight.bold),
+                  ),
+                  children: [
+                    SingleChildScrollView(
+                      scrollDirection:
+                          Axis.horizontal,
+                      child:
+                          SingleChildScrollView(
+                        scrollDirection:
+                            Axis.vertical,
+                        child: DataTable(
+                          border: TableBorder.all(
+                            color: Colors
+                                .grey.shade300,
+                          ),
+                          headingRowColor:
+                              MaterialStateProperty
+                                  .all(Colors
+                                      .blue
+                                      .shade100),
+                          columns: todayRoutine[0]
+                              .map(
+                                (header) =>
+                                    DataColumn(
+                                  label: Text(
+                                    header,
+                                    style:
+                                        const TextStyle(
+                                      fontWeight:
+                                          FontWeight
+                                              .bold,
+                                    ),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          rows: todayRoutine
+                              .sublist(1)
+                              .map(
+                                (row) =>
+                                    DataRow(
+                                  cells: row
+                                      .map(
+                                        (cell) =>
+                                            DataCell(
+                                          Text(cell),
+                                        ),
+                                      )
+                                      .toList(),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
         ),
       ),
     );
